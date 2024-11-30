@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-users-table
+      author: your_name
+      preConditions:
+        - not:
+            tableExists:
+              tableName: users
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column:
+                  name: email
+                  type: VARCHAR(255)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: password
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false

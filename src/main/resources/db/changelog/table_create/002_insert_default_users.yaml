@@ -1,0 +1,18 @@
+databaseChangeLog:
+  - changeSet:
+      id: insert-default-users-if-empty
+      author: your_name
+      preConditions:
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM users
+      changes:
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: email
+                  value: user@mail.ru
+              - column:
+                  name: password
+                  value: $2a$12$zsX8cZD9dIW9GxNDIUiaN.MXczQ7izPCKI7qR9k3Y2Wt4ifiyrFaK
