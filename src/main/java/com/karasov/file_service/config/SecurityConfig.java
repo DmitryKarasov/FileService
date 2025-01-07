@@ -1,13 +1,13 @@
 package com.karasov.file_service.config;
 
-import com.karasov.file_service.service.SystemUserDetailService;
+import com.karasov.file_service.filter.JwtAuthenticationFilter;
+import com.karasov.file_service.service.impl.SystemUserDetailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -16,7 +16,16 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.List;
+
+/**
+ * Конфигурация безопасности
+ */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -25,12 +34,9 @@ public class SecurityConfig {
     private final SystemUserDetailService userDetailsService;
 
     /**
-     * Бин для {@link UserDetailsService}, который используется для загрузки пользователя.
+     * Определяет сервис для получения пользовательских данных (UserDetailsService).
      *
-     * <p>Этот метод возвращает {@link UserDetailsService}, которое загружает данные о пользователе
-     * из базы данных через {@link SystemUserDetailService}.</p>
-     *
-     * @return объект {@link UserDetailsService} для аутентификации пользователей.
+     * @return экземпляр {@link UserDetailsService}, предоставляющий данные о пользователях.
      */
     @Bean
     public UserDetailsService userDetailsService() {
@@ -38,13 +44,11 @@ public class SecurityConfig {
     }
 
     /**
-     * Бин для {@link AuthenticationManager}, который используется для аутентификации пользователей.
+     * Конфигурирует менеджер аутентификации.
      *
-     * <p>Этот метод настраивает и возвращает объект {@link AuthenticationManager} из {@link AuthenticationConfiguration}.</p>
-     *
-     * @param configuration конфигурация для аутентификации.
-     * @return объект {@link AuthenticationManager} для обработки аутентификации.
-     * @throws Exception если возникает ошибка при получении {@link AuthenticationManager}.
+     * @param configuration объект конфигурации аутентификации.
+     * @return {@link AuthenticationManager}, используемый для управления процессом аутентификации.
+     * @throws Exception если возникает ошибка при создании менеджера.
      */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
@@ -52,10 +56,8 @@ public class SecurityConfig {
     }
 
     /**
-     * Бин для {@link AuthenticationProvider}, который используется для аутентификации через {@link DaoAuthenticationProvider}.
-     *
-     * <p>Этот метод настраивает {@link DaoAuthenticationProvider} с {@link UserDetailsService} и {@link PasswordEncoder} для
-     * выполнения аутентификации.</p>
+     * Определяет провайдер аутентификации, который проверяет учетные данные пользователей
+     * через {@link UserDetailsService} и использует шифрование паролей с помощью {@link BCryptPasswordEncoder}.
      *
      * @return настроенный {@link AuthenticationProvider}.
      */
@@ -68,38 +70,58 @@ public class SecurityConfig {
     }
 
     /**
-     * Бин для {@link SecurityFilterChain}, который настраивает фильтры безопасности для HTTP-запросов.
+     * Настраивает источник конфигурации CORS.
      *
-     * <p>Этот метод настраивает фильтры безопасности, разрешая доступ к /login без аутентификации, а остальные запросы
-     * требуют аутентификации. Также включается пользовательский {@link AuthenticationProvider} для аутентификации.</p>
-     *
-     * @param http объект для конфигурации фильтров безопасности.
-     * @return настроенный {@link SecurityFilterChain}.
-     * @throws Exception если возникает ошибка при настройке безопасности.
+     * @return объект {@link CorsConfigurationSource}, определяющий правила CORS.
      */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("http://localhost:8081"));
+        configuration.setAllowedMethods(List.of("*"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
+    /**
+     * Настраивает цепочку фильтров безопасности.
+     *
+     * @param http                    объект конфигурации {@link HttpSecurity}.
+     * @param jwtAuthenticationFilter фильтр для обработки JWT.
+     * @return настроенная цепочка фильтров безопасности.
+     * @throws Exception если возникает ошибка при настройке.
+     */
+    @Bean
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthenticationFilter
+    ) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
-                .cors(Customizer.withDefaults())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login").permitAll()
+                        .requestMatchers("/login", "/logout").permitAll()
                         .anyRequest().authenticated()
                 )
+                .logout(AbstractHttpConfigurer::disable)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .authenticationProvider(authenticationProvider());
         return http.build();
     }
 
     /**
-     * Бин для {@link PasswordEncoder}, который используется для кодирования паролей пользователей.
+     * Определяет BCrypt алгоритм шифрования паролей.
      *
-     * <p>Этот метод возвращает {@link BCryptPasswordEncoder}, который является безопасным методом для кодирования паролей.</p>
-     *
-     * @return объект {@link PasswordEncoder} для кодирования паролей.
+     * @return объект {@link PasswordEncoder}.
      */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 }
+
 

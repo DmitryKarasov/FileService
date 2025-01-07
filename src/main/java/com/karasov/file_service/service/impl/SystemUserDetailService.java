@@ -1,4 +1,4 @@
-package com.karasov.file_service.service;
+package com.karasov.file_service.service.impl;
 
 import com.karasov.file_service.model.SystemUserDetails;
 import com.karasov.file_service.repository.SystemUserRepository;
